@@ -22,6 +22,7 @@ chunk a table is its own project. For now they're treated as plain text.
 import io
 import re
 from dataclasses import dataclass
+from typing import List, Tuple
 
 import pdfplumber
 
@@ -40,7 +41,7 @@ class Chunk:
     char_start: int  # character offset within the page text
 
 
-def extract_pages(file_bytes: bytes) -> list[dict]:
+def extract_pages(file_bytes: bytes) -> List[dict]:
     """
     Open a PDF from raw bytes and pull text out page by page.
     Pages that come back empty (scanned images, blank pages) are skipped.
@@ -76,7 +77,7 @@ def _find_split_point(text: str, ideal_end: int, look_back: int = 80) -> int:
     return ideal_end
 
 
-def split_into_chunks(text: str, chunk_size: int, overlap: int) -> list[tuple[str, int]]:
+def split_into_chunks(text: str, chunk_size: int, overlap: int) -> List[Tuple[str, int]]:
     """
     Sliding-window chunking with overlap.
     Returns a list of (chunk_text, char_start) pairs.
@@ -98,7 +99,7 @@ def split_into_chunks(text: str, chunk_size: int, overlap: int) -> list[tuple[st
     return chunks
 
 
-def ingest_pdf(file_bytes: bytes, filename: str) -> list[Chunk]:
+def ingest_pdf(file_bytes: bytes, filename: str) -> List[Chunk]:
     """
     Full pipeline for one PDF file:
       1. Extract text page by page
