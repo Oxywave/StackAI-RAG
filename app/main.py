@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
 
+from app.api.ingest import router as ingest_router
+
+
 app = FastAPI(
     title="StackAI RAG",
     description="Retrieval-Augmented Generation pipeline over PDF knowledge bases",
@@ -17,9 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routers registered once endpoints are built
-# app.include_router(ingest_router, prefix="/api")
-# app.include_router(query_router, prefix="/api")
+app.include_router(ingest_router, prefix="/api")
 
 
 @app.get("/health")

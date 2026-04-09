@@ -91,3 +91,37 @@ All tunable parameters live in `.env`. Copy `.env.example` to get started.
 `TOP_K 5` — Can be increased for broad research questions or lowered if needed. 5 will handle for now.
 
 `SIMILARITY_THRESHOLD 0.35` — if below this score, retrieved chunks are too loosely related to the query to be trusted as evidence. Can be tuned later with documents.
+
+---
+
+## API
+
+### Ingest
+
+**`POST /api/ingest`**
+Upload one or more PDF files into the knowledge base.
+
+```bash
+curl -X POST http://localhost:8000/api/ingest \
+  -F "files=@report.pdf" \
+  -F "files=@handbook.pdf"
+```
+
+Response:
+```json
+{
+  "files_processed": 2,
+  "total_chunks": 34,
+  "results": [
+    { "filename": "report.pdf", "chunks": 20 },
+    { "filename": "handbook.pdf", "chunks": 14 }
+  ]
+}
+```
+
+**`DELETE /api/ingest`**
+Wipe the entire knowledge base and start fresh.
+
+```bash
+curl -X DELETE http://localhost:8000/api/ingest
+```
