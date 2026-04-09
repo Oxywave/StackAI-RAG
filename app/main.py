@@ -17,7 +17,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routers will be registered here in later commits
+# Routers registered once endpoints are built
 # app.include_router(ingest_router, prefix="/api")
 # app.include_router(query_router, prefix="/api")
 
@@ -27,7 +27,6 @@ async def health():
     return {"status": "ok"}
 
 
-# Mount the UI as static files (populated in commit 11)
 ui_dir = os.path.join(os.path.dirname(__file__), "..", "ui")
 if os.path.isdir(ui_dir):
     app.mount("/", StaticFiles(directory=ui_dir, html=True), name="ui")

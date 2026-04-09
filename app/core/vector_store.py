@@ -1,35 +1,30 @@
 """
 In-memory vector store with cosine similarity search.
 
-Design notes
-------------
 Embeddings are stored as a numpy matrix — one row per chunk — so similarity
-against a query vector is a single matrix-vector multiply followed by a norm
-division. This is fast enough for thousands of chunks without any external
-search infrastructure.
+against a query vector is a single matrix-vector multiply. This is fast enough
+for thousands of chunks without any external search infrastructure.
 
 Persistence is handled by saving the matrix and metadata to two files in the
 storage directory: vectors.npy (the raw float32 matrix) and chunks.json (the
 chunk metadata). On startup, if those files exist, the store reloads them
-automatically. This means ingested documents survive a server restart.
+automatically so ingested documents survive a server restart.
 
 We use Mistral's mistral-embed model to produce 1024-dimensional embeddings.
-All vectors are L2-normalised before storage so the cosine similarity reduces
-to a plain dot product — one fewer division at query time.
-
-Thread safety: this implementation is single-threaded. For a production system
-you'd wrap mutations in a lock, but that's out of scope here.
+All vectors are L2-normalised before storage so cosine similarity reduces to
+a plain dot product — one fewer division at query time.
 """
 
 import json
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from typing import List, Optional
 
 import numpy as np
 from mistralai import Mistral
 
 from app.config import settings
+from app.core.models import SearchResult
 from app.services.ingestion import Chunk
 
 
@@ -37,16 +32,10 @@ EMBED_MODEL = "mistral-embed"
 EMBED_DIM = 1024
 
 
-@dataclass
-class SearchResult:
-    chunk: Chunk
-    score: float  # cosine similarity, 0-1
-
-
 class VectorStore:
     def __init__(self):
         self._client = Mistral(api_key=settings.mistral_api_key)
-        self._vectors: Optional[np.ndarray] = None  # shape (n, EMBED_DIM)
+        self._vectors: Optional[np.ndarray] = None
         self._chunks: List[Chunk] = []
 
         self._vectors_path = os.path.join(settings.storage_dir, "vectors.npy")
@@ -55,17 +44,13 @@ class VectorStore:
         os.makedirs(settings.storage_dir, exist_ok=True)
         self._load()
 
-    # ------------------------------------------------------------------
-    # public API
-    # ------------------------------------------------------------------
-
     def add(self, chunks: List[Chunk]) -> None:
         """Embed a list of chunks and add them to the store."""
         if not chunks:
             return
 
         texts = [c.text for c in chunks]
-        new_vectors = self._embed(texts)  # (n, EMBED_DIM), already normalised
+        new_vectors = self._embed(texts)
 
         if self._vectors is None:
             self._vectors = new_vectors
@@ -80,10 +65,9 @@ class VectorStore:
         if self._vectors is None or len(self._chunks) == 0:
             return []
 
-        query_vec = self._embed([query])[0]  # (EMBED_DIM,)
-        scores = self._vectors @ query_vec   # dot product = cosine sim (normalised)
+        query_vec = self._embed([query])[0]
+        scores = self._vectors @ query_vec
 
-        # grab top-k indices sorted by descending score
         top_indices = np.argsort(scores)[::-1][:top_k]
 
         return [
@@ -103,15 +87,8 @@ class VectorStore:
     def chunk_count(self) -> int:
         return len(self._chunks)
 
-    # ------------------------------------------------------------------
-    # embedding
-    # ------------------------------------------------------------------
-
     def _embed(self, texts: List[str]) -> np.ndarray:
-        """
-        Call the Mistral embedding API and return an L2-normalised matrix.
-        Batches of up to 32 texts at a time to stay within API limits.
-        """
+        """Call Mistral embeddings API and return an L2-normalised matrix."""
         all_embeddings = []
         batch_size = 32
 
@@ -126,12 +103,7 @@ class VectorStore:
             )
             all_embeddings.append(batch_vecs)
 
-        matrix = np.vstack(all_embeddings)
-        return _l2_normalise(matrix)
-
-    # ------------------------------------------------------------------
-    # persistence
-    # ------------------------------------------------------------------
+        return _l2_normalise(np.vstack(all_embeddings))
 
     def _save(self) -> None:
         if self._vectors is not None:
@@ -153,10 +125,6 @@ class VectorStore:
         self._chunks = [Chunk(**item) for item in raw]
 
 
-# ------------------------------------------------------------------
-# module-level singleton
-# ------------------------------------------------------------------
-
 _store: Optional[VectorStore] = None
 
 
@@ -167,10 +135,6 @@ def get_vector_store() -> VectorStore:
         _store = VectorStore()
     return _store
 
-
-# ------------------------------------------------------------------
-# helpers
-# ------------------------------------------------------------------
 
 def _l2_normalise(matrix: np.ndarray) -> np.ndarray:
     """Divide each row by its L2 norm. Rows with zero norm are left as-is."""

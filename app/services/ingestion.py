@@ -1,8 +1,6 @@
 """
 PDF ingestion pipeline — text extraction and chunking.
 
-Chunking strategy notes
------------------------
 We chunk per page rather than concatenating the whole document first. This keeps
 page numbers accurate on every chunk, which matters when we surface citations.
 
@@ -14,9 +12,9 @@ This keeps most chunks semantically complete without complicating the algorithm.
 Chunks shorter than MIN_CHUNK_CHARS are dropped — they're usually stray headers,
 page numbers, or extraction artifacts that add noise without any retrieval value.
 
-We don't do anything special with tables or figures right now. pdfplumber can
-detect table regions, but extracting them as structured data and deciding how to
-chunk a table is its own project. For now they're treated as plain text.
+Tables and figures are treated as plain text for now. pdfplumber can detect table
+regions, but extracting them as structured data and deciding how to chunk a table
+is its own project.
 """
 
 import io
@@ -59,17 +57,15 @@ def extract_pages(file_bytes: bytes) -> List[dict]:
 def _find_split_point(text: str, ideal_end: int, look_back: int = 80) -> int:
     """
     Given an ideal cut position, look back up to `look_back` chars for a
-    cleaner split point — sentence boundary first, word boundary second.
+    cleaner split — sentence boundary first, word boundary second.
     """
     window_start = max(0, ideal_end - look_back)
     window = text[window_start:ideal_end]
 
-    # prefer sentence endings
     sentence_ends = list(re.finditer(r'[.!?]\s+', window))
     if sentence_ends:
         return window_start + sentence_ends[-1].end()
 
-    # settle for a word boundary
     word_boundary = re.search(r'\s\S+$', window)
     if word_boundary:
         return window_start + word_boundary.start() + 1
@@ -101,10 +97,10 @@ def split_into_chunks(text: str, chunk_size: int, overlap: int) -> List[Tuple[st
 
 def ingest_pdf(file_bytes: bytes, filename: str) -> List[Chunk]:
     """
-    Full pipeline for one PDF file:
+    Full pipeline for one PDF:
       1. Extract text page by page
       2. Chunk each page with overlap
-      3. Tag every chunk with its source file, page number, and position
+      3. Tag every chunk with source file, page number, and position
     """
     pages = extract_pages(file_bytes)
     if not pages:
