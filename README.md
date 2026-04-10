@@ -4,11 +4,11 @@ RAG with ability to upload PDF and ask questions about it. Use FastAPI + Mistral
 
 ---
 
-## How It Works
+## Workflow 
 
-PDFs are uploaded through the ingest endpoint. The system extracts text page by page, splits it into overlapping chunks, embeds each chunk using Mistral's embedding model, and indexes them in two ways — a vector store for semantic search and a BM25 index for keyword search.
+PDFs are uploaded via the ingest endpoint. The system extracts text page by page, splits it into overlapping chunks, embeds each chunk using Mistral's embedding model, and indexes them in two ways — a vector store for semantic search and a BM25 index for keyword search.
 
-When a user asks a question, the system detects whether it needs to search the knowledge base at all. If it does, it runs both searches, merges and re-ranks the results, checks whether the evidence is strong enough to answer, and calls Mistral to generate a response grounded in the retrieved chunks.
+When a user asks a question, the system detects whether it needs to search the knowledge base at all. If yes, both searches are executed and it merges and re-ranks the results. It then checks if the evidence is strong enough and calls Mistral to formulate a response grounded in retrieved chunks.
 
 ---
 
@@ -29,8 +29,8 @@ StackAI-RAG/
 │   └── services/
 │       ├── ingestion.py       # PDF extraction and sliding-window chunking
 │       ├── query_processor.py # Intent detection and query rewriting
-│       ├── retrieval.py       # Hybrid search — semantic + keyword fusion (RRF)
-│       ├── reranker.py        # Re-ranking and similarity threshold guard
+│       ├── retriever.py       # Hybrid search — semantic + keyword fusion (RRF)
+│       ├── postprocessor.py   # Score threshold filter and near-duplicate removal
 │       └── generator.py       # Answer generation with intent-shaped prompts
 ├── ui/                        # Chat frontend
 ├── storage/                   # Persisted vector and keyword index data — gitignored
@@ -125,3 +125,39 @@ Wipe the entire knowledge base and start fresh.
 ```bash
 curl -X DELETE http://localhost:8000/api/ingest
 ```
+
+---
+
+### Query
+
+**`POST /api/query`**
+Ask a question against the uploaded documents.
+
+```bash
+curl -X POST http://localhost:8000/api/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What were the Q3 earnings?"}'
+```
+
+Optional `top_k` parameter (1–20) controls how many chunks are retrieved:
+
+```bash
+curl -X POST http://localhost:8000/api/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What were the Q3 earnings?", "top_k": 3}'
+```
+
+Response:
+```json
+{
+  "answer": "Q3 net revenue reached 4.2 billion, up 12% year over year [1].",
+  "intent": "knowledge",
+  "citations": [
+    { "source": "annual_report.pdf", "page": 4 }
+  ],
+  "original_query": "What were the Q3 earnings?",
+  "rewritten_query": "What were the Q3 earnings figures?"
+}
+```
+
+The `intent` field will be `knowledge`, `chitchat`, or `refusal` depending on how the query was classified. Citations are only returned for `knowledge` responses.

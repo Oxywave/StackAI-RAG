@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 
 from app.api.ingest import router as ingest_router
+from app.api.query import router as query_router
 
 
 app = FastAPI(
@@ -21,6 +22,7 @@ app.add_middleware(
 )
 
 app.include_router(ingest_router, prefix="/api")
+app.include_router(query_router, prefix="/api")
 
 
 @app.get("/health")
