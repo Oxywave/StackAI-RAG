@@ -50,6 +50,14 @@ def retrieve(processed: ProcessedQuery, top_k: int = None) -> List[SearchResult]
     fetch_k = top_k * 2
 
     semantic_results = get_vector_store().search(query, fetch_k)
+
+    # Similarity gate — if the best semantic match falls below the configured
+    # threshold the query is off-topic for this knowledge base. Return nothing
+    # immediately so the generator can issue an "insufficient evidence" response
+    # rather than fabricating an answer from loosely related chunks.
+    if not semantic_results or semantic_results[0].score < settings.similarity_threshold:
+        return []
+
     keyword_results = get_keyword_index().search(query, fetch_k)
 
     return _rrf_merge(semantic_results, keyword_results, top_k)

@@ -203,6 +203,41 @@
     .badge-chitchat  { background: #e6f4ea; color: #2e7d32; }
     .badge-refusal   { background: #fce8e6; color: #c62828; }
 
+    /* hallucination flagged block */
+    .flagged-block {
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: #fff8e1;
+      border-left: 3px solid #f9a825;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .flagged-label {
+      font-weight: 600;
+      color: #e65100;
+      margin-bottom: 6px;
+    }
+    .flagged-item {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #ffe082;
+    }
+    .flagged-item:first-of-type {
+      border-top: none;
+      padding-top: 0;
+    }
+    .flagged-sentence {
+      margin: 0 0 4px 0;
+      color: #5d4037;
+      font-style: italic;
+    }
+    .flagged-reason {
+      margin: 0;
+      color: #795548;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
     /* citations */
     .citations { display: flex; flex-wrap: wrap; gap: 5px; }
     .citation {
@@ -533,7 +568,7 @@
       if (!res.ok) {
         appendMessage('assistant', data.detail || 'Something went wrong.');
       } else {
-        appendMessage('assistant', data.answer, data.intent, data.citations);
+        appendMessage('assistant', data.answer, data.intent, data.citations, data.flagged_sentences);
       }
     } catch (err) {
       typingEl.remove();
@@ -544,7 +579,7 @@
     }
   }
 
-  function appendMessage(role, text, intent, citations) {
+  function appendMessage(role, text, intent, citations, flagged) {
     const wrap = document.createElement('div');
     wrap.className = `msg ${role}`;
 
@@ -561,10 +596,15 @@
       const meta = document.createElement('div');
       meta.className = 'msg-meta';
 
-      const badge = document.createElement('span');
-      badge.className = `badge badge-${intent}`;
-      badge.textContent = intent;
-      meta.appendChild(badge);
+      // Hide the knowledge badge when there are no citations — this covers both
+      // similarity gate rejections and model-level "can't answer" responses.
+      const noAnswer = intent === 'knowledge' && (!citations || citations.length === 0);
+      if (!noAnswer) {
+        const badge = document.createElement('span');
+        badge.className = `badge badge-${intent}`;
+        badge.textContent = intent;
+        meta.appendChild(badge);
+      }
 
       if (citations && citations.length > 0) {
         const citWrap = document.createElement('div');
@@ -576,6 +616,37 @@
           citWrap.appendChild(span);
         });
         meta.appendChild(citWrap);
+      }
+
+      if (flagged && flagged.length > 0) {
+        const flagBlock = document.createElement('div');
+        flagBlock.className = 'flagged-block';
+
+        const label = document.createElement('div');
+        label.className = 'flagged-label';
+        label.textContent = 'Hallucination filter flagged the following sentences:';
+        flagBlock.appendChild(label);
+
+        flagged.forEach(f => {
+          const item = document.createElement('div');
+          item.className = 'flagged-item';
+
+          const sentence = document.createElement('p');
+          sentence.className = 'flagged-sentence';
+          sentence.textContent = `"${f.sentence}"`;
+          item.appendChild(sentence);
+
+          const reason = document.createElement('p');
+          reason.className = 'flagged-reason';
+          const pct = Math.round(f.coverage * 100);
+          reason.textContent = `Only ${pct}% of this sentence's terms were found in the retrieved source material. ` +
+            `The model introduced the following words not present in any retrieved chunk: ${f.unsupported_terms.join(', ')}.`;
+          item.appendChild(reason);
+
+          flagBlock.appendChild(item);
+        });
+
+        wrap.appendChild(flagBlock);
       }
 
       wrap.appendChild(meta);

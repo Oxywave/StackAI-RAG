@@ -36,6 +36,16 @@ from app.services.query_processor import Intent, ProcessedQuery
 GENERATION_MODEL = "mistral-small-latest"
 MAX_TOKENS = 512
 
+# Single message returned for all "can't answer" outcomes — whether the
+# similarity gate rejected the query before retrieval, or the model determined
+# the retrieved context was insufficient to answer.
+NO_ANSWER_MESSAGE = "The context provided cannot answer this question."
+
+# Minimum fraction of a sentence's content tokens that must appear in the
+# retrieved chunks. Sentences that fail this check are removed — they indicate
+# the model introduced information not present in the source material.
+EVIDENCE_COVERAGE_THRESHOLD = 0.30
+
 
 @dataclass
 class Citation:
@@ -44,10 +54,18 @@ class Citation:
 
 
 @dataclass
+class FlaggedSentence:
+    sentence: str
+    coverage: float          # fraction of sentence tokens found in retrieved chunks (0.0–1.0)
+    unsupported_terms: List[str]  # content words the model used that don't appear in any chunk
+
+
+@dataclass
 class GeneratedAnswer:
     answer: str
     intent: Intent
     citations: List[Citation] = field(default_factory=list)
+    flagged_sentences: List[FlaggedSentence] = field(default_factory=list)
 
 
 def generate(processed: ProcessedQuery, results: List[SearchResult]) -> GeneratedAnswer:
@@ -69,7 +87,7 @@ def _rag_answer(processed: ProcessedQuery, results: List[SearchResult]) -> Gener
     """Build a grounded answer from retrieved context chunks."""
     if not results:
         return GeneratedAnswer(
-            answer="I couldn't find relevant information in the uploaded documents to answer that question.",
+            answer=NO_ANSWER_MESSAGE,
             intent=processed.intent,
             citations=[],
         )
@@ -105,14 +123,20 @@ Answer:"""
 
     answer_text = _clean_answer(response.choices[0].message.content.strip())
 
-    # If the model says it can't answer from the context, don't attach
-    # citations — the retrieved chunks weren't actually useful.
+    # Similarity gate (second layer) — if the model itself says it can't answer
+    # from the retrieved context, return the same unified no-answer message as
+    # the pre-retrieval similarity gate. No citations, no flagged sentences.
     if _is_no_answer(answer_text):
         return GeneratedAnswer(
-            answer=answer_text,
+            answer=NO_ANSWER_MESSAGE,
             intent=processed.intent,
             citations=[],
         )
+
+    # Evidence check — strip sentences whose content words aren't supported by
+    # the retrieved chunks. This catches hallucinated details the model may have
+    # added beyond what the passages actually say.
+    answer_text, flagged = _evidence_check(answer_text, results)
 
     seen = set()
     citations = []
@@ -126,6 +150,7 @@ Answer:"""
         answer=answer_text,
         intent=processed.intent,
         citations=citations,
+        flagged_sentences=flagged,
     )
 
 
@@ -170,6 +195,100 @@ def _is_no_answer(text: str) -> bool:
         "not covered",
     ]
     return any(phrase in lower for phrase in indicators)
+
+
+def _split_sentences(text: str) -> List[str]:
+    """Split text into sentences on sentence-ending punctuation."""
+    parts = re.split(r'(?<=[.!?])\s+', text.strip())
+    return [p.strip() for p in parts if p.strip()]
+
+
+# Phrases that identify meta-statements — sentences where the model is
+# describing the absence of information rather than making a factual claim.
+# These should never be flagged as hallucinations.
+_META_PHRASES = [
+    # References to the source material itself
+    "the context", "the document", "the paper", "the text", "the passage",
+    "the provided", "the excerpt", "the source",
+    # Explicit absence / limitation language
+    "does not explicitly", "does not directly", "does not provide",
+    "does not contain", "does not mention", "does not state",
+    "does not specify", "does not address", "does not include",
+    "does not appear", "do not explicitly", "do not directly",
+    "not explicitly", "not directly", "not provided", "not mentioned",
+    "not stated", "not specified", "not addressed", "not available",
+    "no information", "no direct", "no explicit", "no mention",
+    "insufficient", "unable to determine", "cannot be determined",
+    "it is unclear", "it is not clear",
+]
+
+def _is_meta_sentence(sentence: str) -> bool:
+    """
+    Return True if the sentence is a meta-statement about absent or
+    insufficient information rather than a positive factual claim.
+
+    Such sentences should be kept as-is and never flagged — the model is
+    being transparent about limitations, not introducing hallucinated facts.
+    Real hallucinations are positive assertions (fabricated names, numbers,
+    dates, outcomes) whose content words don't appear in the retrieved chunks.
+    """
+    lower = sentence.lower().strip()
+    return any(phrase in lower for phrase in _META_PHRASES)
+
+
+def _evidence_check(answer: str, results: List[SearchResult]):
+    """
+    Remove sentences from the answer that aren't grounded in the retrieved chunks.
+
+    For each sentence, we count how many of its content tokens appear in the
+    combined token set of all retrieved chunks. If fewer than
+    EVIDENCE_COVERAGE_THRESHOLD of the sentence's tokens are covered, the
+    sentence is flagged and dropped.
+
+    Very short sentences (< 3 tokens) are always kept — they're typically
+    connective phrases that don't carry factual claims.
+
+    For each flagged sentence we record:
+      - coverage: fraction of tokens found in the retrieved chunks
+      - unsupported_terms: the specific words the model used that don't appear
+        anywhere in the source material — the direct evidence of hallucination
+
+    Returns a tuple of (cleaned_answer, List[FlaggedSentence]).
+    Failsafe: if all sentences are filtered out, return the original answer
+    unchanged so the caller never receives an empty string.
+    """
+    from app.core.keyword_index import tokenize
+
+    chunk_tokens: set = set()
+    for r in results:
+        chunk_tokens.update(tokenize(r.chunk.text))
+
+    sentences = _split_sentences(answer)
+    kept = []
+    flagged: List[FlaggedSentence] = []
+
+    for sentence in sentences:
+        tokens = tokenize(sentence)
+        # Very short sentences or meta-statements about absent/insufficient
+        # information are always kept — they are not factual claims and cannot
+        # be hallucinations.
+        if len(tokens) < 3 or _is_meta_sentence(sentence):
+            kept.append(sentence)
+            continue
+        covered = sum(1 for t in tokens if t in chunk_tokens)
+        coverage = covered / len(tokens)
+        if coverage >= EVIDENCE_COVERAGE_THRESHOLD:
+            kept.append(sentence)
+        else:
+            unsupported = [t for t in tokens if t not in chunk_tokens]
+            flagged.append(FlaggedSentence(
+                sentence=sentence,
+                coverage=round(coverage, 2),
+                unsupported_terms=unsupported,
+            ))
+
+    cleaned = " ".join(kept) if kept else answer
+    return cleaned, flagged
 
 
 def _chitchat_answer(processed: ProcessedQuery) -> GeneratedAnswer:

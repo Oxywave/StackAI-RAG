@@ -13,7 +13,11 @@ class Settings(BaseSettings):
 
     # Retrieval
     top_k: int = Field(5, env="TOP_K")
-    similarity_threshold: float = Field(0.35, env="SIMILARITY_THRESHOLD")
+    # Mistral's dense embeddings compress all text into a narrow cone — even
+    # unrelated queries score ~0.40–0.55 cosine similarity. A threshold of 0.35
+    # is effectively useless. 0.60 sits above the noise floor and below typical
+    # on-topic scores (0.65+), making the similarity gate actually meaningful.
+    similarity_threshold: float = Field(0.60, env="SIMILARITY_THRESHOLD")
 
     # Server
     host: str = Field("0.0.0.0", env="HOST")

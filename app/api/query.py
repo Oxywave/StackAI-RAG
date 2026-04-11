@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.services.generator import generate
+from app.services.generator import FlaggedSentence, generate
 from app.services.postprocessor import postprocess
 from app.services.query_processor import Intent, process_query
 from app.services.retriever import retrieve
@@ -37,12 +37,19 @@ class CitationOut(BaseModel):
     page: int
 
 
+class FlaggedSentenceOut(BaseModel):
+    sentence: str
+    coverage: float
+    unsupported_terms: List[str]
+
+
 class QueryResponse(BaseModel):
     answer: str
     intent: str
     citations: List[CitationOut]
     original_query: str
     rewritten_query: str
+    flagged_sentences: List[FlaggedSentenceOut]
 
 
 @router.post("/query", response_model=QueryResponse)
@@ -72,4 +79,12 @@ async def query(request: QueryRequest):
         citations=[CitationOut(source=c.source, page=c.page) for c in answer.citations],
         original_query=processed.original,
         rewritten_query=processed.rewritten,
+        flagged_sentences=[
+            FlaggedSentenceOut(
+                sentence=f.sentence,
+                coverage=f.coverage,
+                unsupported_terms=f.unsupported_terms,
+            )
+            for f in answer.flagged_sentences
+        ],
     )

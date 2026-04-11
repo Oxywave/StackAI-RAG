@@ -105,7 +105,7 @@ All tunable parameters live in `.env`. Copy `.env.example` to get started.
 | `CHUNK_SIZE` | 512 | Characters per text chunk when splitting PDFs |
 | `CHUNK_OVERLAP` | 64 | Overlap between consecutive chunks to preserve context |
 | `TOP_K` | 5 | Number of chunks retrieved per query |
-| `SIMILARITY_THRESHOLD` | 0.35 | Minimum score — below this, the system returns "insufficient evidence" |
+| `SIMILARITY_THRESHOLD` | 0.60 | Minimum score — below this, the system returns "insufficient evidence" |
 | `STORAGE_DIR` | ./storage | Where the vector and keyword indexes are saved to disk |
 
 **Why these defaults?**
@@ -116,7 +116,7 @@ All tunable parameters live in `.env`. Copy `.env.example` to get started.
 
 `TOP_K 5` — Can be increased for broad research questions or lowered if needed. 5 will handle for now.
 
-`SIMILARITY_THRESHOLD 0.35` — if below this score, retrieved chunks are too loosely related to the query to be trusted as evidence. Can be tuned later with documents.
+`SIMILARITY_THRESHOLD 0.60` — Mistral's dense embeddings compress everything into a narrow cone, so even unrelated queries score 0.40–0.55 cosine similarity. 0.60 sits above that noise floor and below typical on-topic scores (0.65+), making the gate meaningful. Below this score the query is considered off-topic and the system returns "insufficient evidence" with no citations.
 
 ---
 
