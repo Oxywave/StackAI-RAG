@@ -1,5 +1,5 @@
 """
-BM25 keyword index — built from scratch, no external search libraries.
+BM25 keyword index
 
 BM25 (Best Match 25) scores how relevant a document is to a query based on the
 words they share. It improves on simple word counting in two ways:
@@ -42,8 +42,8 @@ from app.services.ingestion import Chunk
 K1 = 1.5
 B = 0.75
 
-# Full NLTK English stopword list inlined — no download, no dependency.
-# Source: nltk.corpus.stopwords.words('english'), 179 words.
+# Hardcoded NLTK English stopword list. NO externl libraries are used here
+
 STOPWORDS = {
     "i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you",
     "you're", "you've", "you'll", "you'd", "your", "yours", "yourself",

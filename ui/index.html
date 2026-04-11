@@ -177,6 +177,10 @@
       border-bottom-left-radius: 4px;
       color: #1a1a1a;
     }
+    .msg-bubble p { margin: 0 0 8px 0; }
+    .msg-bubble p:last-child { margin-bottom: 0; }
+    .msg-bubble ul, .msg-bubble ol { margin: 6px 0; padding-left: 22px; }
+    .msg-bubble li { margin: 3px 0; }
 
     .msg-meta {
       display: flex;
@@ -454,6 +458,52 @@
     if (type === 'success') setTimeout(() => { sidebarStatus.className = 'status-msg'; }, 4000);
   }
 
+  // ── markdown renderer ──────────────────────────────────────────────────────
+  function escapeHtml(text) {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function inlineFmt(text) {
+    text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    return text;
+  }
+
+  function renderMarkdown(raw) {
+    const escaped = escapeHtml(raw);
+    const lines = escaped.split('\n');
+    let html = '';
+    let inUl = false;
+    let inOl = false;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      const ulMatch = trimmed.match(/^[-*]\s+(.+)/);
+      const olMatch = trimmed.match(/^(\d+)[.)]\s+(.+)/);
+
+      if (ulMatch && !trimmed.startsWith('**')) {
+        if (inOl) { html += '</ol>'; inOl = false; }
+        if (!inUl) { html += '<ul>'; inUl = true; }
+        html += '<li>' + inlineFmt(ulMatch[1]) + '</li>';
+      } else if (olMatch) {
+        if (inUl) { html += '</ul>'; inUl = false; }
+        if (!inOl) { html += '<ol>'; inOl = true; }
+        html += '<li>' + inlineFmt(olMatch[2]) + '</li>';
+      } else {
+        if (inUl) { html += '</ul>'; inUl = false; }
+        if (inOl) { html += '</ol>'; inOl = false; }
+        if (trimmed === '') {
+          html += '';
+        } else {
+          html += '<p>' + inlineFmt(trimmed) + '</p>';
+        }
+      }
+    }
+    if (inUl) html += '</ul>';
+    if (inOl) html += '</ol>';
+    return html;
+  }
+
   // ── query ──────────────────────────────────────────────────────────────────
   sendBtn.addEventListener('click', sendQuery);
 
@@ -481,13 +531,13 @@
       typingEl.remove();
 
       if (!res.ok) {
-        appendMessage('assistant', data.detail || 'Something went wrong.', null, null);
+        appendMessage('assistant', data.detail || 'Something went wrong.');
       } else {
         appendMessage('assistant', data.answer, data.intent, data.citations);
       }
-    } catch {
+    } catch (err) {
       typingEl.remove();
-      appendMessage('assistant', 'Could not reach the server. Is it running?', null, null);
+      appendMessage('assistant', `Could not reach the server. Make sure it is running at http://localhost:8000 (error: ${err.message})`);
     } finally {
       busy = false;
       sendBtn.disabled = queryInput.value.trim() === '';
@@ -500,7 +550,11 @@
 
     const bubble = document.createElement('div');
     bubble.className = 'msg-bubble';
-    bubble.textContent = text;
+    if (role === 'assistant' && intent) {
+      bubble.innerHTML = renderMarkdown(text);
+    } else {
+      bubble.textContent = text;
+    }
     wrap.appendChild(bubble);
 
     if (role === 'assistant' && intent) {

@@ -47,6 +47,7 @@ def postprocess(results: List[SearchResult], top_k: int) -> List[SearchResult]:
     return deduped[:top_k]
 
 
+
 def _remove_near_duplicates(results: List[SearchResult]) -> List[SearchResult]:
     """
     Remove chunks that are near-copies of a higher-ranked chunk.

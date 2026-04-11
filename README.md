@@ -10,6 +10,8 @@ PDFs are uploaded via the ingest endpoint. The system extracts text page by page
 
 When a user asks a question, the system detects whether it needs to search the knowledge base at all. If yes, both searches are executed and it merges and re-ranks the results. It then checks if the evidence is strong enough and calls Mistral to formulate a response grounded in retrieved chunks.
 
+If the retrieved context doesn't contain enough information to answer the question, the system returns a clear "can't answer" response with no citations — instead of citing irrelevant chunks.
+
 ---
 
 ## Project Structure
@@ -17,7 +19,7 @@ When a user asks a question, the system detects whether it needs to search the k
 ```
 StackAI-RAG/
 ├── app/
-│   ├── main.py               # FastAPI app, CORS, /health
+│   ├── main.py               # FastAPI app, CORS, static files, /health
 │   ├── config.py             # All settings loaded from environment
 │   ├── api/
 │   │   ├── ingest.py         # POST /ingest — PDF upload and indexing
@@ -31,12 +33,36 @@ StackAI-RAG/
 │       ├── query_processor.py # Intent detection and query rewriting
 │       ├── retriever.py       # Hybrid search — semantic + keyword fusion (RRF)
 │       ├── postprocessor.py   # Score threshold filter and near-duplicate removal
-│       └── generator.py       # Answer generation with intent-shaped prompts
-├── ui/                        # Chat frontend
+│       └── generator.py       # Answer generation, citation cleanup, no-answer detection
+├── ui/
+│   └── index.html             # Single-page chat interface
 ├── storage/                   # Persisted vector and keyword index data — gitignored
 ├── .env.example               # All required environment variables
+├── start.sh                   # Quick-start script
 └── requirements.txt
 ```
+
+---
+
+## Chat UI
+
+The frontend is a single-page HTML/CSS/JS chat interface served at the root URL (`http://localhost:8000`). No frameworks, no build step — just one `index.html` file.
+
+**Left sidebar:**
+- Drag-and-drop PDF upload (multiple files supported)
+- Document list showing filenames and chunk counts
+- Clear knowledge base button
+
+**Right chat area:**
+- Message bubbles (user on the right, assistant on the left)
+- Typing indicator (bouncing dots) while waiting for a response
+- Intent badges below each response — `knowledge`, `chitchat`, or `refusal`
+- Source citation tags showing filename and page number
+
+**Response formatting:**
+- Responses render with proper markdown — bold, italic, bullet points, numbered lists
+- Lists are only used when the user explicitly asks for them; default responses are plain prose
+- Citation markers like `[1]`, `[2]` are automatically stripped from Mistral's output
 
 ---
 
@@ -65,7 +91,7 @@ cp .env.example .env
 uvicorn app.main:app --reload
 ```
 
-Server starts at `http://localhost:8000`. Hit `/health` to confirm it's up.
+Server starts at `http://localhost:8000`. The chat UI loads at the root URL. Hit `/health` to confirm it's up.
 
 ---
 
@@ -86,7 +112,7 @@ All tunable parameters live in `.env`. Copy `.env.example` to get started.
 
 `CHUNK_SIZE 512` — 512 chars covers about a paragraph or two, should suit most documents.
 
-`CHUNK_OVERLAP 64` — This is a bit over 10% of chunk size above. As sucuh, sentences that fall on boundary don't get cut in half semantically — the overlap carries them into the next chunk.
+`CHUNK_OVERLAP 64` — This is a bit over 10% of chunk size above. As such, sentences that fall on boundary don't get cut in half semantically — the overlap carries them into the next chunk.
 
 `TOP_K 5` — Can be increased for broad research questions or lowered if needed. 5 will handle for now.
 
@@ -150,7 +176,7 @@ curl -X POST http://localhost:8000/api/query \
 Response:
 ```json
 {
-  "answer": "Q3 net revenue reached 4.2 billion, up 12% year over year [1].",
+  "answer": "Q3 net revenue reached 4.2 billion, up 12% year over year.",
   "intent": "knowledge",
   "citations": [
     { "source": "annual_report.pdf", "page": 4 }
@@ -160,4 +186,34 @@ Response:
 }
 ```
 
-The `intent` field will be `knowledge`, `chitchat`, or `refusal` depending on how the query was classified. Citations are only returned for `knowledge` responses.
+The `intent` field will be `knowledge`, `chitchat`, or `refusal` depending on how the query was classified. Citations are only returned for `knowledge` responses where the context was sufficient to answer.
+
+---
+
+## How It Works
+
+### Intent Classification
+Every query is first classified by Mistral into one of three intents:
+- **Knowledge** — needs document context, triggers retrieval pipeline
+- **Chitchat** — conversational, answered directly without documents
+- **Refusal** — inappropriate or out-of-scope, returns a polite decline
+
+### Hybrid Retrieval
+Knowledge queries run through two independent search systems:
+- **Semantic search** — query is embedded via Mistral's `mistral-embed` model and compared against chunk embeddings using cosine similarity
+- **BM25 keyword search** — TF-IDF scoring with k1=1.5, b=0.75, built from scratch with hardcoded stopwords
+
+Results from both systems are merged using Reciprocal Rank Fusion (RRF) with k=60, which avoids normalizing incompatible score scales by working only on rank positions.
+
+### Post-processing
+Retrieved chunks pass through two filters:
+- **Score threshold** — drops chunks whose RRF score falls below `1/(60 + top_k)`
+- **Near-duplicate removal** — Jaccard similarity at 0.80 threshold removes overlapping chunks from the sliding window
+
+### Answer Generation
+The final prompt is shaped by intent:
+- **Knowledge** — grounded RAG prompt with retrieved context, instructed to only use provided passages
+- **Chitchat** — short conversational prompt, no document context
+- **Refusal** — fixed polite decline, no API call
+
+After generation, citation markers (`[1]`, `[2]`) are stripped from the answer. If the model indicates it cannot answer from the context (phrases like "does not contain", "cannot answer"), citations are cleared so irrelevant source tags don't appear.

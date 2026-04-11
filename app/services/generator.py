@@ -22,7 +22,7 @@ This uniform shape means the API layer in commit 10 can handle all three paths
 without branching on intent itself.
 """
 
-import os
+import re
 from dataclasses import dataclass, field
 from typing import List
 
@@ -75,9 +75,9 @@ def _rag_answer(processed: ProcessedQuery, results: List[SearchResult]) -> Gener
         )
 
     context_blocks = []
-    for i, result in enumerate(results, start=1):
+    for result in results:
         context_blocks.append(
-            f"[{i}] (source: {result.chunk.source}, page {result.chunk.page})\n{result.chunk.text}"
+            f"(source: {result.chunk.source}, page {result.chunk.page})\n{result.chunk.text}"
         )
     context = "\n\n".join(context_blocks)
 
@@ -85,7 +85,8 @@ def _rag_answer(processed: ProcessedQuery, results: List[SearchResult]) -> Gener
 
 Use only the context passages below to answer the question. Do not use outside knowledge.
 If the context does not contain enough information to answer, say so clearly — do not guess.
-Be concise. Reference the passage numbers (e.g. [1], [2]) where relevant.
+Be concise. Only use bullet points or numbered lists if the user explicitly asks to list or enumerate items — otherwise respond in plain prose paragraphs.
+Do not include citation markers like [1] or [2] in your answer.
 
 Context:
 {context}
@@ -102,7 +103,16 @@ Answer:"""
         max_tokens=MAX_TOKENS,
     )
 
-    answer_text = response.choices[0].message.content.strip()
+    answer_text = _clean_answer(response.choices[0].message.content.strip())
+
+    # If the model says it can't answer from the context, don't attach
+    # citations — the retrieved chunks weren't actually useful.
+    if _is_no_answer(answer_text):
+        return GeneratedAnswer(
+            answer=answer_text,
+            intent=processed.intent,
+            citations=[],
+        )
 
     seen = set()
     citations = []
@@ -117,6 +127,49 @@ Answer:"""
         intent=processed.intent,
         citations=citations,
     )
+
+
+def _clean_answer(text: str) -> str:
+    """
+    Strip leftover citation markers from the generated answer.
+
+    Mistral occasionally ignores the 'no citation markers' instruction, so
+    we defensively remove patterns like [1], [1,2], [1][2] from the text.
+    Bold and italic formatting is left intact.
+    """
+    # Remove inline citation markers: [1], [1, 2], [1][2], [1,2,3] etc.
+    text = re.sub(r'\[\d+(?:,\s*\d+)*\]', '', text)
+    # Collapse any double spaces left by removed markers
+    text = re.sub(r'  +', ' ', text)
+    return text.strip()
+
+
+def _is_no_answer(text: str) -> bool:
+    """
+    Detect when the model's response is a 'cannot answer' message rather
+    than a genuine answer. Mistral is instructed to say so clearly when
+    the context doesn't contain enough information, so we look for common
+    refusal phrases in the generated text.
+    """
+    lower = text.lower()
+    indicators = [
+        "cannot answer",
+        "can't answer",
+        "not contain",
+        "does not contain",
+        "doesn't contain",
+        "no information",
+        "not enough information",
+        "couldn't find",
+        "could not find",
+        "not able to answer",
+        "unable to answer",
+        "not mentioned",
+        "no relevant",
+        "outside the scope",
+        "not covered",
+    ]
+    return any(phrase in lower for phrase in indicators)
 
 
 def _chitchat_answer(processed: ProcessedQuery) -> GeneratedAnswer:

@@ -64,7 +64,6 @@ async def query(request: QueryRequest):
 
     results = retrieve(processed, top_k=top_k)
     clean_results = postprocess(results, top_k=top_k)
-
     answer = generate(processed, clean_results)
 
     return QueryResponse(
