@@ -10,38 +10,40 @@ from app.services.ingestion import ingest_pdf
 
 router = APIRouter()
 
-
+# The two response models
+# Per-file ingestion result returned in API response 
 class FileResult(BaseModel):
-    filename: str
-    chunks: int
+    filename: str   # file name
+    chunks: int     # chunk count
 
-
+# Full response schema for /ingest endpoint
 class IngestResponse(BaseModel):
     files_processed: int
     total_chunks: int
     results: List[FileResult]
 
 
+# POST /ingest endpoint — upload one or more PDFs and add them into the knowledge base
 @router.post("/ingest", response_model=IngestResponse)
 async def ingest(files: List[UploadFile] = File(...)):
-    """
-    Upload one or more PDF files for ingestion into the knowledge base.
 
-    Each file is extracted, chunked, embedded, and indexed in both the
-    vector store and keyword index. Returns a summary per file.
-    """
+    # Reject empty upload request
     if not files:
         raise HTTPException(status_code=400, detail="No files provided.")
 
     results = []
 
+    # Process each uploaded file independently
     for upload in files:
         _validate_pdf(upload)
 
         raw = await upload.read()
 
+        # Run PDF ingestion pipeline (extract text -> chunk)
         try:
             chunks = ingest_pdf(raw, upload.filename)
+
+        # If parsing/chunking fails, return PDF parsing error
         except Exception as e:
             raise HTTPException(
                 status_code=422,
@@ -55,11 +57,16 @@ async def ingest(files: List[UploadFile] = File(...)):
                        "The file may be a scanned image without embedded text.",
             )
 
+        # Add chunks into semantic vector index
         get_vector_store().add(chunks)
+
+        # Add chunks into BM25 keyword index
         get_keyword_index().add(chunks)
 
-        results.append(FileResult(filename=upload.filename, chunks=len(chunks)))
-
+        # Record successful ingestion result for this file
+        results.append(FileResult(filename = upload.filename, chunks = len(chunks)))
+    
+    # Return ingestion summary for all processed files
     return IngestResponse(
         files_processed=len(results),
         total_chunks=sum(r.chunks for r in results),
@@ -67,16 +74,18 @@ async def ingest(files: List[UploadFile] = File(...)):
     )
 
 
+# Clears the entire indexed knowledge base
 @router.delete("/ingest")
 async def clear_index():
-    """Wipe the entire knowledge base — vector store and keyword index."""
+
     get_vector_store().clear()
     get_keyword_index().clear()
     return {"detail": "Knowledge base cleared."}
 
 
+# Reject uploads that do not look like PDFs
 def _validate_pdf(upload: UploadFile) -> None:
-    """Raise 400 if the uploaded file doesn't look like a PDF."""
+
     filename = upload.filename or ""
     content_type = upload.content_type or ""
 

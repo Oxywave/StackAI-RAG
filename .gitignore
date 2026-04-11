@@ -29,6 +29,7 @@ env/
 # Data and storage (keep the folder, ignore runtime data files)
 data/
 storage/*.json
+storage/*.npy
 storage/*.bak
 *.json.bak
 

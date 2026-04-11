@@ -13,6 +13,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Letting everything in for simplicity for demo
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,6 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Register API routers
 app.include_router(ingest_router, prefix="/api")
 app.include_router(query_router, prefix="/api")
 

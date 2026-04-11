@@ -29,6 +29,67 @@
     }
     header h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
     header span { font-size: 12px; color: #888; margin-left: 4px; }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; position: relative; }
+
+    .theme-btn {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid #e0e0e0;
+      background: #fff;
+      color: #444;
+      transition: background 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+    .theme-btn:hover { background: #f5f5f5; border-color: #ccc; }
+
+    .export-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid #e0e0e0;
+      background: #fff;
+      color: #444;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .export-btn:hover { background: #f5f5f5; border-color: #ccc; }
+    .export-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .export-menu {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+      min-width: 170px;
+      z-index: 100;
+      overflow: hidden;
+    }
+    .export-menu.open { display: block; }
+    .export-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #333;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .export-menu-item:hover { background: #f5f7ff; }
+    .export-menu-divider { height: 1px; background: #f0f0f0; }
 
     /* ── layout ── */
     .layout {
@@ -317,6 +378,67 @@
     }
     .send-btn:hover:not(:disabled) { background: #3d5ce0; }
     .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── dark mode ── */
+    body.dark { background: #111318; color: #e0e0e0; }
+
+    body.dark header { background: #1c1f26; border-bottom-color: #2a2d35; }
+    body.dark header span { color: #666; }
+
+    body.dark .export-btn { background: #1c1f26; border-color: #2e3140; color: #bbb; }
+    body.dark .export-btn:hover { background: #252936; border-color: #3a3f54; }
+    body.dark .export-menu { background: #1c1f26; border-color: #2e3140; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+    body.dark .export-menu-item { color: #ccc; }
+    body.dark .export-menu-item:hover { background: #252936; }
+    body.dark .export-menu-divider { background: #2a2d35; }
+
+    body.dark .theme-btn { background: #1c1f26; border-color: #2e3140; color: #bbb; }
+    body.dark .theme-btn:hover { background: #252936; border-color: #3a3f54; }
+
+    body.dark .sidebar { background: #1c1f26; border-right-color: #2a2d35; }
+    body.dark .sidebar-title { color: #555; }
+
+    body.dark .upload-zone { border-color: #2e3140; }
+    body.dark .upload-zone:hover, body.dark .upload-zone.drag-over { border-color: #4f6ef7; background: #1a1f35; }
+    body.dark .upload-zone p { color: #888; }
+    body.dark .upload-zone small { color: #555; }
+
+    body.dark .btn-danger { background: #1c1f26; border-color: #5c2d29; color: #f28b82; }
+    body.dark .btn-danger:hover:not(:disabled) { background: #2a1f1e; }
+
+    body.dark .doc-item { background: #252830; color: #aaa; }
+    body.dark .doc-item .doc-chunks { color: #555; }
+    body.dark .empty-docs { color: #444; }
+
+    body.dark .status-msg.success { background: #1a2e1c; color: #81c784; }
+    body.dark .status-msg.error   { background: #2e1a1a; color: #ef9a9a; }
+    body.dark .status-msg.loading { background: #1a1e35; color: #7986cb; }
+
+    body.dark .messages { background: #111318; }
+    body.dark .welcome h2 { color: #666; }
+    body.dark .welcome p { color: #444; }
+
+    body.dark .msg.assistant .msg-bubble { background: #1c1f26; border-color: #2a2d35; color: #e0e0e0; }
+
+    body.dark .badge-knowledge { background: #1a2040; color: #7b9cff; }
+    body.dark .badge-chitchat  { background: #1a2e1c; color: #81c784; }
+    body.dark .badge-refusal   { background: #2e1a1a; color: #ef9a9a; }
+
+    body.dark .citation { background: #252830; color: #aaa; }
+
+    body.dark .flagged-block { background: #2a2210; border-left-color: #f9a825; }
+    body.dark .flagged-label { color: #ffb74d; }
+    body.dark .flagged-item { border-top-color: #3a3020; }
+    body.dark .flagged-sentence { color: #bcaaa4; }
+    body.dark .flagged-reason { color: #a1887f; }
+
+    body.dark .input-bar { background: #1c1f26; border-top-color: #2a2d35; }
+    body.dark textarea { background: #252830; border-color: #2e3140; color: #e0e0e0; }
+    body.dark textarea:focus { border-color: #4f6ef7; }
+    body.dark textarea::placeholder { color: #555; }
+
+    body.dark .dot { background: #555; }
+    body.dark .msg.assistant .typing .msg-bubble { background: #1c1f26; border-color: #2a2d35; }
   </style>
 </head>
 <body>
@@ -324,6 +446,17 @@
 <header>
   <h1>Stack RAG</h1>
   <span>Answering Questions about your PDF</span>
+  <div class="header-right">
+    <button class="theme-btn" id="themeBtn">Dark Mode</button>
+    <button class="export-btn" id="exportBtn" disabled title="Export chat history">
+      ↓ Export Chat
+    </button>
+    <div class="export-menu" id="exportMenu">
+      <div class="export-menu-item" id="exportMd">Download Markdown</div>
+      <div class="export-menu-divider"></div>
+      <div class="export-menu-item" id="exportPdf">Export as PDF</div>
+    </div>
+  </div>
 </header>
 
 <div class="layout">
@@ -379,19 +512,153 @@
 <script>
   const API = '';
 
-  const fileInput    = document.getElementById('fileInput');
-  const uploadZone   = document.getElementById('uploadZone');
+  const fileInput     = document.getElementById('fileInput');
+  const uploadZone    = document.getElementById('uploadZone');
   const sidebarStatus = document.getElementById('sidebarStatus');
-  const docList      = document.getElementById('docList');
-  const emptyDocs    = document.getElementById('emptyDocs');
-  const clearBtn     = document.getElementById('clearBtn');
-  const messages     = document.getElementById('messages');
-  const welcome      = document.getElementById('welcome');
-  const queryInput   = document.getElementById('queryInput');
-  const sendBtn      = document.getElementById('sendBtn');
+  const docList       = document.getElementById('docList');
+  const emptyDocs     = document.getElementById('emptyDocs');
+  const clearBtn      = document.getElementById('clearBtn');
+  const messages      = document.getElementById('messages');
+  const welcome       = document.getElementById('welcome');
+  const queryInput    = document.getElementById('queryInput');
+  const sendBtn       = document.getElementById('sendBtn');
+  const exportBtn     = document.getElementById('exportBtn');
+  const exportMenu    = document.getElementById('exportMenu');
+  const exportMd      = document.getElementById('exportMd');
+  const exportPdf     = document.getElementById('exportPdf');
+  const themeBtn      = document.getElementById('themeBtn');
 
   let docs = [];
   let busy = false;
+  let chatLog = [];  // [{role, text, intent, citations, flagged, timestamp}]
+
+  // ── dark mode toggle ───────────────────────────────────────────────────────
+  themeBtn.addEventListener('click', () => {
+    document.body.classList.toggle('dark');
+    themeBtn.textContent = document.body.classList.contains('dark') ? 'Light Mode' : 'Dark Mode';
+  });
+
+  // ── export menu toggle ─────────────────────────────────────────────────────
+  exportBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    exportMenu.classList.toggle('open');
+  });
+  document.addEventListener('click', () => exportMenu.classList.remove('open'));
+
+  exportMd.addEventListener('click', () => {
+    exportMenu.classList.remove('open');
+    downloadMarkdown();
+  });
+  exportPdf.addEventListener('click', () => {
+    exportMenu.classList.remove('open');
+    openPdfPrint();
+  });
+
+  function downloadMarkdown() {
+    const lines = [`# Stack RAG — Chat Export`, `*Exported: ${new Date().toLocaleString()}*`, ``];
+    chatLog.forEach(entry => {
+      if (entry.role === 'user') {
+        lines.push(`---`, ``, `**You** · ${entry.timestamp}`, ``, entry.text, ``);
+      } else {
+        lines.push(`**Assistant** · ${entry.timestamp}`, ``, entry.text, ``);
+        if (entry.citations && entry.citations.length > 0) {
+          const cites = entry.citations.map(c => `${c.source} · p${c.page}`).join(', ');
+          lines.push(`*Sources: ${cites}*`, ``);
+        }
+        if (entry.flagged && entry.flagged.length > 0) {
+          lines.push(`> ⚠️ Hallucination filter flagged ${entry.flagged.length} sentence(s):`);
+          entry.flagged.forEach(f => {
+            lines.push(`> - "${f.sentence}" *(${Math.round(f.coverage * 100)}% coverage — unsupported: ${f.unsupported_terms.join(', ')})*`);
+          });
+          lines.push(``);
+        }
+      }
+    });
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `stack-rag-export-${Date.now()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function openPdfPrint() {
+    const rows = chatLog.map(entry => {
+      if (entry.role === 'user') {
+        return `
+          <div class="msg user">
+            <div class="label">You <span class="ts">${entry.timestamp}</span></div>
+            <div class="bubble user-bubble">${escapeHtmlPrint(entry.text)}</div>
+          </div>`;
+      }
+      let citHtml = '';
+      if (entry.citations && entry.citations.length > 0) {
+        const chips = entry.citations.map(c =>
+          `<span class="chip">${escapeHtmlPrint(c.source)} · p${c.page}</span>`
+        ).join('');
+        citHtml = `<div class="citations">${chips}</div>`;
+      }
+      let flagHtml = '';
+      if (entry.flagged && entry.flagged.length > 0) {
+        const items = entry.flagged.map(f =>
+          `<li><em>"${escapeHtmlPrint(f.sentence)}"</em> — ${Math.round(f.coverage * 100)}% coverage, unsupported: ${f.unsupported_terms.join(', ')}</li>`
+        ).join('');
+        flagHtml = `<div class="flag-block"><strong>⚠️ Hallucination filter flagged:</strong><ul>${items}</ul></div>`;
+      }
+      return `
+        <div class="msg assistant">
+          <div class="label">Assistant <span class="ts">${entry.timestamp}</span></div>
+          <div class="bubble asst-bubble">${escapeHtmlPrint(entry.text)}</div>
+          ${citHtml}${flagHtml}
+        </div>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<title>Stack RAG — Chat Export</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 40px auto; color: #1a1a1a; font-size: 14px; line-height: 1.6; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .meta { color: #888; font-size: 12px; margin-bottom: 32px; }
+  .msg { margin-bottom: 24px; }
+  .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin-bottom: 6px; }
+  .ts { font-weight: 400; margin-left: 6px; }
+  .bubble { padding: 12px 16px; border-radius: 10px; white-space: pre-wrap; word-break: break-word; }
+  .user-bubble { background: #e8ecff; margin-left: auto; max-width: 85%; }
+  .asst-bubble { background: #f7f7f7; border: 1px solid #e8e8e8; max-width: 100%; }
+  .citations { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 11px; background: #f0f0f0; border-radius: 5px; padding: 2px 8px; color: #555; }
+  .flag-block { margin-top: 10px; padding: 10px 12px; background: #fff8e1; border-left: 3px solid #f9a825; border-radius: 4px; font-size: 12px; }
+  .flag-block ul { margin: 6px 0 0 16px; }
+  hr { border: none; border-top: 1px solid #eee; margin: 32px 0; }
+  @media print { body { margin: 20px; } }
+</style>
+</head>
+<body>
+<h1>Stack RAG — Chat Export</h1>
+<div class="meta">Exported: ${new Date().toLocaleString()}</div>
+<hr/>
+${rows}
+<script>window.onload = () => window.print();<\/script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
+  }
+
+  function escapeHtmlPrint(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
 
   // ── textarea auto-grow + enable send on input ──────────────────────────────
   queryInput.addEventListener('input', () => {
@@ -553,6 +820,8 @@
 
     if (welcome) welcome.remove();
 
+    const ts = new Date().toLocaleTimeString();
+    chatLog.push({ role: 'user', text, timestamp: ts });
     appendMessage('user', text);
     const typingEl = appendTyping();
 
@@ -566,13 +835,26 @@
       typingEl.remove();
 
       if (!res.ok) {
-        appendMessage('assistant', data.detail || 'Something went wrong.');
+        const errText = data.detail || 'Something went wrong.';
+        chatLog.push({ role: 'assistant', text: errText, timestamp: new Date().toLocaleTimeString(), citations: [], flagged: [] });
+        appendMessage('assistant', errText);
       } else {
+        chatLog.push({
+          role: 'assistant',
+          text: data.answer,
+          intent: data.intent,
+          citations: data.citations,
+          flagged: data.flagged_sentences,
+          timestamp: new Date().toLocaleTimeString(),
+        });
         appendMessage('assistant', data.answer, data.intent, data.citations, data.flagged_sentences);
       }
+      exportBtn.disabled = false;
     } catch (err) {
       typingEl.remove();
-      appendMessage('assistant', `Could not reach the server. Make sure it is running at http://localhost:8000 (error: ${err.message})`);
+      const errText = `Could not reach the server. Make sure it is running at http://localhost:8000 (error: ${err.message})`;
+      chatLog.push({ role: 'assistant', text: errText, timestamp: new Date().toLocaleTimeString(), citations: [], flagged: [] });
+      appendMessage('assistant', errText);
     } finally {
       busy = false;
       sendBtn.disabled = queryInput.value.trim() === '';

@@ -1,85 +1,79 @@
-"""
-Post-processing — filters and deduplicates retrieval results before they
-reach the answer generator.
-
-Two passes run in sequence:
-
-1. Threshold guard — drops any chunk whose RRF score falls below a minimum
-   cutoff. RRF scores are not on a fixed scale, so the cutoff is derived from
-   the fusion constant: 1 / (RRF_K + top_k). Any chunk that would rank below
-   top_k in both retrieval systems scores lower than this and is discarded.
-   This prevents weak, loosely-related passages from polluting the answer.
-
-2. Near-duplicate removal — compares every remaining pair of chunks using
-   Jaccard similarity on their token sets. If two chunks share more than 80%
-   of their tokens, the lower-ranked one is dropped. This handles PDFs that
-   repeat the same content across sections (summaries, headers, boilerplate)
-   without sending redundant context to the generator.
-
-The result is a short, high-confidence, non-redundant list of chunks ready
-for answer synthesis.
-"""
+# Post-processing retrieval before anwwer generation
+# Remove weak chunks if below RRF threshold + remove redundant chunks 
 
 from typing import List
-
 from app.core.models import SearchResult
 from app.core.keyword_index import tokenize
 
-
+# Same damping constant used in RRF
 RRF_K = 60
+
+# If >= 80% similar (Jaccard Similarity) —> considered duplicate
 DUPLICATE_THRESHOLD = 0.80
 
 
+# Main post-processing entry point
 def postprocess(results: List[SearchResult], top_k: int) -> List[SearchResult]:
-    """
-    Filter and deduplicate a ranked list of retrieval results.
 
-    Applies the score threshold first, then removes near-duplicates.
-    Returns at most top_k results.
-    """
+    # If empty retrieval result lists 
     if not results:
         return []
 
+    # min accepted score 
     min_score = 1.0 / (RRF_K + top_k)
+
+    # Drop chunks with final combined score below min_score 
     filtered = [r for r in results if r.score >= min_score]
+
+    # Remove near-duplicates
     deduped = _remove_near_duplicates(filtered)
 
+    # Left is cleaned list, return
     return deduped[:top_k]
 
 
 
+# Removing near-duplicate chunks 
 def _remove_near_duplicates(results: List[SearchResult]) -> List[SearchResult]:
-    """
-    Remove chunks that are near-copies of a higher-ranked chunk.
 
-    Uses Jaccard similarity on token sets. A chunk is considered a duplicate
-    if it shares more than DUPLICATE_THRESHOLD of its tokens with any
-    already-accepted chunk. The input list is assumed to be sorted by score
-    descending — higher-ranked chunks are always kept over lower-ranked ones.
-    """
+    # Stores surviving chunks 
     kept = []
+
+    # Token sets of kept chunks — in sync with kept
     kept_token_sets = []
 
     for result in results:
+        
+        # Convert chunks to token sets for Jaccard similarity
         tokens = set(tokenize(result.chunk.text))
 
         is_duplicate = False
+
+        # Compare current chunk against every previously kept chunk
         for existing_tokens in kept_token_sets:
+
+            # Drop chunk if too similar — above 0.8 Jaccard similarity + break
             if _jaccard(tokens, existing_tokens) >= DUPLICATE_THRESHOLD:
                 is_duplicate = True
                 break
-
+        
+        # Keep unique chunks 
         if not is_duplicate:
             kept.append(result)
             kept_token_sets.append(tokens)
 
     return kept
 
-
+# Compute jaccard similarity btw 2 chunks — scan for word overlap
 def _jaccard(a: set, b: set) -> float:
-    """Jaccard similarity between two token sets."""
+
+    # Both empty = identical edge case
     if not a and not b:
-        return 1.0
+        return 1.0  
+
+    # Calculate intersection and union of token sets
     intersection = len(a & b)
     union = len(a | b)
+
+    # diving intersection by union — scores btw 0 and 1 always
     return intersection / union if union > 0 else 0.0

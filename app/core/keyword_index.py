@@ -1,31 +1,8 @@
-"""
-BM25 keyword index
+# BM25 keyword search
 
-BM25 (Best Match 25) scores how relevant a document is to a query based on the
-words they share. It improves on simple word counting in two ways:
+# k1 = 1.5  — term frequency saturation
+# b  = 0.75 — length normalisation, 0 = off, 1 = full
 
-  1. Term frequency saturation — finding a word 10 times doesn't make a document
-     10x more relevant. BM25 applies a curve that flattens at higher counts (k1).
-
-  2. Length normalisation — long documents contain more words by definition, so
-     matching a term there means less than matching it in a short focused chunk (b).
-
-IDF (inverse document frequency) gives rare words more weight than common ones.
-A word in every document tells you nothing; a word in two documents is a strong signal.
-
-Formula per query term t, document d:
-  score += IDF(t) * (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * dl / avgdl))
-
-  where tf    = times t appears in d
-        dl    = length of d in tokens
-        avgdl = average document length across all indexed chunks
-        IDF   = log((N - df + 0.5) / (df + 0.5) + 1)
-        N     = total chunks indexed
-        df    = number of chunks containing t
-
-k1 = 1.5  — term frequency saturation, standard range is 1.2–2.0
-b  = 0.75 — length normalisation, 0 = off, 1 = full
-"""
 
 import json
 import math
@@ -38,12 +15,13 @@ from app.config import settings
 from app.core.models import SearchResult
 from app.services.ingestion import Chunk
 
-
+# BM25 term-frequency saturation parameter — larger values make repeated term matches matter more
 K1 = 1.5
+
+# BM25 length-normalization parameter – 0 = no length penalty, 1 = full normalization
 B = 0.75
 
-# Hardcoded NLTK English stopword list. NO externl libraries are used here
-
+# Hardcoded NLTK English stopword list. 
 STOPWORDS = {
     "i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you",
     "you're", "you've", "you'll", "you'd", "your", "yours", "yourself",
@@ -69,85 +47,128 @@ STOPWORDS = {
     "won't", "wouldn", "wouldn't",
 }
 
-
+# Tokenize — lowercase, remove punctuation, split, drop stopwords and 1-char tokens
 def tokenize(text: str) -> List[str]:
-    """Lowercase, strip punctuation, split on whitespace, remove stopwords."""
+
     text = text.lower()
     text = re.sub(r"[^a-z0-9\s]", " ", text)
     tokens = text.split()
     return [t for t in tokens if t not in STOPWORDS and len(t) > 1]
 
 
+# In-memory BM25 index over document chunks
 class BM25Index:
+
+
     def __init__(self):
+
+        # Stored chunk metadata in index order
         self._chunks: List[Chunk] = []
+
+        # Per-chunk term frequency maps: one dict per chunk
         self._tf: List[Dict[str, int]] = []   # term freq per chunk
+
+        # Document frequency per term: number of chunks containing the term
         self._df: Dict[str, int] = {}         # number of chunks containing each term
+
+        # Chunk lengths measured in tokens
         self._doc_lengths: List[int] = []     # token count per chunk
+
+        # Average chunk length across the whole index
         self._avgdl: float = 0.0
 
         self._index_path = os.path.join(settings.storage_dir, "keyword_index.json")
         os.makedirs(settings.storage_dir, exist_ok=True)
         self._load()
 
+
+    # Add new chunks into the BM25 index
     def add(self, chunks: List[Chunk]) -> None:
-        """Index a list of chunks."""
+   
         if not chunks:
             return
 
+
         for chunk in chunks:
+            # Tokenize chunk text into normalized search terms
             tokens = tokenize(chunk.text)
+
+            # Count how many times each term appears in this chunk
             tf = dict(Counter(tokens))
 
+            # Store chunk metadata and per-chunk term statistics
             self._chunks.append(chunk)
             self._tf.append(tf)
             self._doc_lengths.append(len(tokens))
 
+            # Update document frequency once per unique term in this chunk
             for term in tf:
                 self._df[term] = self._df.get(term, 0) + 1
 
+        # Recompute average document length after adding new chunks
         self._avgdl = sum(self._doc_lengths) / len(self._doc_lengths)
         self._save()
 
+
+    # Score all indexed chunks against a query using BM25
     def search(self, query: str, top_k: int) -> List[SearchResult]:
-        """Score every indexed chunk against the query and return the top-k."""
+        # Empty index -> no results
         if not self._chunks:
             return []
 
+        # Tokenize query in the same way as document chunks
         query_tokens = tokenize(query)
+
+        # Query with no meaningful tokens cannot retrieve anything
         if not query_tokens:
             return []
-
+        
         n = len(self._chunks)
+
+        # One BM25 score per chunk, initialized to zero
         scores = [0.0] * n
 
+        # Process each query term independently and add its BM25 contribution
         for term in query_tokens:
             if term not in self._df:
                 continue
-
+            
+            # Compute inverse document frequency for this term
             idf = self._idf(term, n)
 
+            # Score this term against every chunk
             for i, tf_map in enumerate(self._tf):
+                # Term frequency of current term in this chunk
                 tf = tf_map.get(term, 0)
+
+                # No contribution if chunk does not contain the term
                 if tf == 0:
                     continue
 
-                dl = self._doc_lengths[i]
+                dl = self._doc_lengths[i]    # Length of current chunk in tokens
+                
+                # BM25 term-frequency component with length normalization
                 normalised_tf = (tf * (K1 + 1)) / (
                     tf + K1 * (1 - B + B * dl / self._avgdl)
                 )
+
+                # Add this term's BM25 contribution to chunk score
                 scores[i] += idf * normalised_tf
 
+        # Rank chunks by descending BM25 score
         ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
 
+        # Convert top-scoring chunks into SearchResult objects
         results = []
         for idx, score in ranked[:top_k]:
-            if score <= 0:
+            if score <= 0:      # Stop once scores become non-positive
                 break
             results.append(SearchResult(chunk=self._chunks[idx], score=score))
 
         return results
 
+
+    # Wipe whole index from memory and disk
     def clear(self) -> None:
         """Wipe the index from memory and disk."""
         self._chunks = []
@@ -158,14 +179,24 @@ class BM25Index:
         if os.path.exists(self._index_path):
             os.remove(self._index_path)
 
+
+
     @property
     def chunk_count(self) -> int:
         return len(self._chunks)
 
+    # Compute BM25 inverse document frequency for one term
     def _idf(self, term: str, n: int) -> float:
+        
+        # Number of chunks containing this term
         df = self._df.get(term, 0)
-        return math.log((n - df + 0.5) / (df + 0.5) + 1)
 
+        # +0.5 is smoothing term and +1 is to ensure positive
+        # BM25 IDF formula: rarer terms receive higher weight
+        return math.log((n - df + 0.5) / (df + 0.5) + 1)    
+
+
+     # Save all BM25 state to disk as JSON
     def _save(self) -> None:
         from dataclasses import asdict
         data = {
@@ -180,6 +211,8 @@ class BM25Index:
         with open(self._index_path, "w") as f:
             json.dump(data, f)
 
+
+    # Reload BM25 state from disk if previously saved
     def _load(self) -> None:
         if not os.path.exists(self._index_path):
             return
@@ -196,9 +229,9 @@ class BM25Index:
 
 _index: Optional[BM25Index] = None
 
-
+# Return the shared BM25 index, creating it on first use
 def get_keyword_index() -> BM25Index:
-    """Return the shared BM25Index instance, creating it on first call."""
+
     global _index
     if _index is None:
         _index = BM25Index()
