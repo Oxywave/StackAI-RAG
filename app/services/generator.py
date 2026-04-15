@@ -47,8 +47,6 @@ class GeneratedAnswer:
     flagged_sentences: List[FlaggedSentence] = field(default_factory = list)
 
 
-
-
     
 # Main public entry point — router
 def generate(processed: ProcessedQuery, results: List[SearchResult]) -> GeneratedAnswer:
@@ -67,8 +65,7 @@ def generate(processed: ProcessedQuery, results: List[SearchResult]) -> Generate
 # Building grounded answer from chunks retrieved
 def _rag_answer(processed: ProcessedQuery, results: List[SearchResult]) -> GeneratedAnswer:
 
-    # Similarity gate (1st layer)
-    # If similarity gate in retriever deemed chunks irrelevant, return default decline message 
+    # Check if result list input is empty 
     if not results:
         return GeneratedAnswer(answer = NO_ANSWER_MESSAGE, intent = processed.intent, citations=[],
         )
@@ -81,8 +78,8 @@ def _rag_answer(processed: ProcessedQuery, results: List[SearchResult]) -> Gener
         )
     context = "\n\n".join(context_blocks)
 
-    # Prompt forces grounded answering from context only
-    # Exclude citation marker for response clealiness + use bullets point when asked to list
+    # Mistral prompt forces grounded answering from context only
+    # Exclude citation marker for response clealiness, use bullets point when asked to list
     prompt = f"""You are a helpful assistant answering questions based on uploaded documents.
 
     Use only the context passages below to answer the question. Do not use outside knowledge. If the context does not contain enough information to answer, say so clearly — do not guess.
@@ -101,7 +98,7 @@ Answer:"""
     response = client.chat.complete(model = GENERATION_MODEL, 
         messages = [{"role": "user", "content": prompt}], 
         temperature = 0.2, 
-        max_token = MAX_TOKENS,
+        max_tokens = MAX_TOKENS,
     )
 
     # clean citation markers just in case
@@ -264,7 +261,7 @@ Respond naturally and helpfully in one or two sentences.
 
 User: {processed.original}"""
 
-    # Higher temperature for conversational variability
+    # higher temperature to sound like real chitchat
     # Cap response length short for quick replies
     client = Mistral(api_key=settings.mistral_api_key)
     response = client.chat.complete(

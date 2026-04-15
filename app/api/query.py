@@ -1,11 +1,9 @@
 # Query endpoint — POST /api/query
 
-
 import json
 import os
 from datetime import datetime, timezone
 from typing import List, Optional
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 

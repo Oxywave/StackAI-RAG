@@ -1,9 +1,5 @@
 # BM25 keyword search
 
-# k1 = 1.5  — term frequency saturation
-# b  = 0.75 — length normalisation, 0 = off, 1 = full
-
-
 import json
 import math
 import os

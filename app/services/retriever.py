@@ -9,7 +9,7 @@ from app.core.models import SearchResult
 from app.core.vector_store import get_vector_store
 from app.services.query_processor import Intent, ProcessedQuery
 
-# damping constant for RRF
+# Damping constant for RRF
 RRF_K = 60
 
 
@@ -28,15 +28,21 @@ def retrieve(processed: ProcessedQuery, top_k: int) -> List[SearchResult]:
 
     # run both semantic + bm25 search
     semantic_results = get_vector_store().search(query, fetch_k)
+
+    # Similarity Gate Layer 1
+    # Check top cosine score against the threshold before spending any more compute
+    if not semantic_results or semantic_results[0].score < settings.similarity_threshold:
+        return []
+
+    # run BM25 keyword search
     keyword_results = get_keyword_index().search(query, fetch_k)
 
-    # merg using RRF
+    # merge using RRF
     return _rrf_merge(semantic_results, keyword_results, top_k)
 
 
 
 # Reciprocal Rank Fusion 
-# 
 
 def _rrf_merge(semantic: List[SearchResult], keyword: List[SearchResult], top_k: int,) -> List[SearchResult]:
     # dict to store scores by chunk key

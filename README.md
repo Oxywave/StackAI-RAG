@@ -1,12 +1,18 @@
-# StackAI-RAG
+# Stack-RAG
 
 RAG pipeline with PDF upload, hybrid search, hallucination detection, and a chat UI. Built with FastAPI and Mistral AI. No external search libraries, no vector database frameworks, no RAG frameworks.
 
 ---
 
+## Demo
+
+Quick demo run of Stack RAG: [Watch on Loom](https://www.loom.com/share/b73916f5588c42e39d6735b3f3dafa6e)
+
+---
+
 ## Workflow
 
-PDFs are uploaded via the ingest endpoint. The system extracts text page by page, splits it into overlapping chunks, embeds each chunk using Mistral's embedding model, and indexes them in two ways — a vector store for semantic search and a BM25 index for keyword search.
+PDFs are uploaded via the ingest endpoint. The system extracts text page by page, splits it into overlapping chunks, embeds each chunk using Mistral's embedding model, and indexes them in 2 ways — a vector store for semantic search and a BM25 index for keyword search.
 
 When a user asks a question, the system classifies the intent and decides whether to search the knowledge base at all. If yes, both searches are executed, their results are merged and re-ranked, and the evidence is checked for quality before calling Mistral to generate a response grounded in the retrieved chunks.
 
@@ -14,7 +20,9 @@ Before returning the answer, a hallucination detector scans each sentence agains
 
 If the retrieved context doesn't contain enough information to answer the question, the system returns a clean "can't answer" response with no citations.
 
-Every question and answer is automatically logged to `storage/chat_log.json`. The full session can be exported as a Markdown file or PDF from the chat UI.
+Every question and answer is automatically logged. The full session can be exported as a Markdown file or PDF from the chat UI for other use. 
+
+Please check-out the diagrams below! 
 
 ---
 
@@ -29,20 +37,21 @@ StackAI-RAG/
 │   │   ├── ingest.py         # POST /ingest — PDF upload and indexing
 │   │   └── query.py          # POST /query — question answering, response schema, chat log
 │   ├── core/
-│   │   ├── models.py         # Shared types (SearchResult, Chunk)
+│   │   ├── models.py         # Shared type: SearchResult (Chunk is defined in services/ingestion.py)
 │   │   ├── vector_store.py   # In-memory cosine similarity search via Mistral embeddings
 │   │   └── keyword_index.py  # BM25 keyword search; tokenize() is reused by hallucination detector
 │   └── services/
 │       ├── ingestion.py       # PDF extraction and sliding-window chunking
 │       ├── query_processor.py # Intent classification (KNOWLEDGE / CHITCHAT / REFUSAL) and query rewriting
-│       ├── retriever.py       # Hybrid search + similarity gate (Layer 1)
+│       ├── retriever.py       # Hybrid search (semantic + BM25) + similarity gate (Layer 1) + RRF merge
 │       ├── postprocessor.py   # RRF score threshold filter and Jaccard near-duplicate removal
 │       └── generator.py       # Answer generation, similarity gate (Layer 2), hallucination detector
 ├── ui/
 │   └── index.html             # Single-page chat interface — no frameworks, vanilla JS
-├── storage/                   # Persisted indexes and chat log — gitignored
+├── storage/                   # Runtime data — all files gitignored, folder tracked via .gitkeep
 │   ├── vectors.npy            # Chunk embedding matrix
-│   ├── chunks.json            # Chunk metadata for BM25 index
+│   ├── chunks.json            # Vector store chunk metadata — maps matrix rows to source chunks
+│   ├── keyword_index.json     # BM25 index — term frequencies, document frequencies, doc lengths
 │   └── chat_log.json          # Append-only Q&A session log
 ├── .env                       # Environment variables — API key and all config (gitignored)
 ├── start.sh                   # Quick-start script
@@ -76,8 +85,8 @@ flowchart TD
     No API call, no citations"])
 
     G -->|passes| I["BM25 Keyword Search
-    TF-IDF scoring, built from scratch
-    Calculates relevance per document"]
+    BM25 scoring, built from scratch
+    Term frequency saturation + length normalisation"]
 
     I --> J["RRF Merge
     Reciprocal Rank Fusion  k = 60
@@ -125,14 +134,14 @@ flowchart TD
 
     C --> E["BM25 Index
     Tokenised term frequencies
-    chunks.json"]
+    keyword_index.json"]
 ```
 
 ---
 
 ## Chat UI
 
-The Stack RAG frontend is a single-page HTML/CSS/JS chat interface with a function for you to upload multiple PDF documents. It also has the ability to toggle between light and dark modes, and an option to save chat as a JSON or a PDF file. Accessable at the root URL (`http://localhost:8000`). 
+The Stack RAG frontend is a single-page HTML/CSS/JS chat interface with a function for you to upload multiple PDF documents. It also has the ability to toggle between light and dark modes, and an option to export the chat as a Markdown file or PDF. Accessible at the root URL (`http://localhost:8000`). 
 
 **Left sidebar:**
 - Drag-and-drop PDF upload and supports multiple files
@@ -140,7 +149,6 @@ The Stack RAG frontend is a single-page HTML/CSS/JS chat interface with a functi
 - Clear knowledge base button
 
 **Right chat area:**
-- Message bubbles (user on the right, assistant on the left)
 - Typing indicator (bouncing dots) while waiting for a response
 - Intent badges below each response — `knowledge`, `chitchat`, or `refusal`
 - Source citation badges showing filename and page number
@@ -295,9 +303,9 @@ The `intent` field is either `knowledge`, `chitchat`, or `refusal`. Citations ar
 Goal of this is to prevent sytem from answering questions that uploaded documents does not support. There's a pre-retrieval layer and post-generation layer. 
 
 **Layer 1 — Pre-retrieval (`app/services/retriever.py`)**
-After the semantic search runs, the top cosine similarity score is checked against `SIMILARITY_THRESHOLD` (default 0.60) before further processing. If the best-matching chunk in the knowledge base scores below this threshold, the query is off-topic and an empty result is returned immediately — no keyword search, no RRF merge, no Mistral generation call — This is the cheapest possible rejection.
+After the semantic search, top cosine similarity score is checked against `SIMILARITY_THRESHOLD` (default to 0.6) before further processing. If the best-matching chunk in the knowledge base scores below 0.6, the query is deemed off-topic and an empty result is returned — no keyword search, no RRF merge, no Mistral generation call — This is the cheapest possible rejection.
 
-The threshold is set at 0.60 because of Mistra's embedding model known as the embedding cone problem. During testing the threshold was set at 0.30 and the system would not flag anything as off-topic. To remedy this, different values were tested and 0.60 struck the sweet spot. With Mistral, dense embeddings don't distribute evenly across vector space — all text gets compressed into a narrow cluster, so unrelated queries can easily score 0.40–0.55 cosine similarity against any document. A threshold below 0.60 would effectively never fire. 0.60 sits above that noise floor while remaining below typical on-topic scores of 0.65 and above.
+The threshold is set at 0.6 because of Mistra's embedding model known as the embedding cone problem. During testing the threshold was set at 0.3 and the system would not flag anything as off-topic. To remedy this, different values were tested and 0.6 struck the sweet spot. With Mistral, dense embeddings don't distribute evenly across vector space — all text gets compressed into a narrow cluster, so unrelated queries can easily score 0.4–0.55 cosine similarity against any document. A threshold below 0.6 would effectively never fire. 0.6 sits above that noise floor while remaining below typical on-topic scores of 0.65 and above.
 
 **Layer 2 — Post-generation (`app/services/generator.py`)**
 Some queries pass Layer 1 because their topic is related, but the specific answer isn't present in the retrieved chunks. For example, asking about Q4 results when only Q1–Q3 data was uploaded for a company's report. The similarity score is high, but the specific fact is missing. Layer 1 cannot detect this — only the model can, after reading the actual chunk text.
@@ -343,5 +351,3 @@ All nine packages in `requirements.txt` — no RAG frameworks, no vector databas
 | `python-dotenv` | `.env` file loading |
 | `pydantic` | Request and response model validation |
 | `pydantic-settings` | Settings class with environment variable binding |
-
-BM25, tokenisation, RRF merging, sliding-window chunking, near-duplicate removal, and the hallucination detector are all implemented from scratch with no additional dependencies.
